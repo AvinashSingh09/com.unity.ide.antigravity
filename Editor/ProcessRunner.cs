@@ -130,13 +130,16 @@ namespace Google.Unity.Antigravity.Editor
 #if UNITY_EDITOR_OSX
 				storageDirs.Add(Path.Combine(userProfile, "Library", "Application Support", "Antigravity IDE", "User", "workspaceStorage"));
 				storageDirs.Add(Path.Combine(userProfile, "Library", "Application Support", "Antigravity", "User", "workspaceStorage"));
+				storageDirs.Add(Path.Combine(userProfile, "Library", "Application Support", "Codex", "User", "workspaceStorage"));
 #elif UNITY_EDITOR_LINUX
 				storageDirs.Add(Path.Combine(userProfile, ".config", "Antigravity IDE", "User", "workspaceStorage"));
 				storageDirs.Add(Path.Combine(userProfile, ".config", "Antigravity", "User", "workspaceStorage"));
 				storageDirs.Add(Path.Combine(userProfile, ".config", "antigravity", "User", "workspaceStorage"));
+				storageDirs.Add(Path.Combine(userProfile, ".config", "Codex", "User", "workspaceStorage"));
 #else
 				storageDirs.Add(Path.Combine(userProfile, "AppData", "Roaming", "Antigravity IDE", "User", "workspaceStorage"));
 				storageDirs.Add(Path.Combine(userProfile, "AppData", "Roaming", "Antigravity", "User", "workspaceStorage"));
+				storageDirs.Add(Path.Combine(userProfile, "AppData", "Roaming", "Codex", "User", "workspaceStorage"));
 #endif
 
 				foreach (var storagePath in storageDirs)

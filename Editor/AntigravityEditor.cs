@@ -118,6 +118,14 @@ namespace Google.Unity.Antigravity.Editor
 				EditorGUILayout.Space();
 			}
 
+			var chooserRect = EditorGUI.IndentedRect(EditorGUILayout.GetControlRect());
+			chooserRect.width = 252;
+			if (GUI.Button(chooserRect, "Code Editor Chooser Setup..."))
+			{
+				AntigravityChooserWindow.ShowWindow();
+			}
+
+			EditorGUILayout.Space();
 			EditorGUILayout.LabelField("Generate .csproj files for:");
 			EditorGUI.indentLevel++;
 			SettingsButton(ProjectGenerationFlag.Embedded, "Embedded packages", "", installation);

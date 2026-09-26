@@ -21,6 +21,7 @@ namespace Google.Unity.Antigravity.Editor
 	{
 		private static readonly IGenerator _generator = new SdkStyleProjectGeneration();
 		internal const string ReuseExistingWindowKey = "antigravity_reuse_existing_window";
+		internal const string CustomEditorPathKey = "antigravity_custom_editor_path";
 
 		public override bool SupportsAnalyzers
 		{
@@ -71,11 +72,11 @@ namespace Google.Unity.Antigravity.Editor
 		private static bool IsCandidateForDiscovery(string path)
 		{
 #if UNITY_EDITOR_OSX
-			return Directory.Exists(path) && Regex.IsMatch(path, ".*Antigravity.*.app$", RegexOptions.IgnoreCase);
+			return Directory.Exists(path) && Regex.IsMatch(path, ".*(antigravity|codex).*.app$", RegexOptions.IgnoreCase);
 #elif UNITY_EDITOR_WIN
-			return File.Exists(path) && Regex.IsMatch(path, ".*antigravity.*.exe$", RegexOptions.IgnoreCase);
+			return File.Exists(path) && Regex.IsMatch(path, ".*(antigravity|codex).*.exe$", RegexOptions.IgnoreCase);
 #else
-			return File.Exists(path) && (path.EndsWith("antigravity", StringComparison.OrdinalIgnoreCase) || path.EndsWith("antigravity-ide", StringComparison.OrdinalIgnoreCase));
+			return File.Exists(path) && (path.EndsWith("antigravity", StringComparison.OrdinalIgnoreCase) || path.EndsWith("antigravity-ide", StringComparison.OrdinalIgnoreCase) || path.EndsWith("codex", StringComparison.OrdinalIgnoreCase));
 #endif
 		}
 
@@ -117,18 +118,18 @@ namespace Google.Unity.Antigravity.Editor
 				manifestBase = parent?.Name == "bin" ? parent.Parent?.FullName : parent?.FullName;
 #endif
 
-				if (manifestBase == null)
-					return false;
-
-				var manifestFullPath = IOPath.Combine(manifestBase, "resources", "app", "package.json");
-				if (File.Exists(manifestFullPath))
+				if (manifestBase != null)
 				{
-					var manifest = JsonUtility.FromJson<VisualStudioCodeManifest>(File.ReadAllText(manifestFullPath));
-					Version.TryParse(manifest.version.Split('-').First(), out version);
-					isPrerelease = manifest.version.ToLower().Contains("insider");
-					if (!string.IsNullOrEmpty(manifest.name))
+					var manifestFullPath = IOPath.Combine(manifestBase, "resources", "app", "package.json");
+					if (File.Exists(manifestFullPath))
 					{
-						displayName = manifest.name;
+						var manifest = JsonUtility.FromJson<VisualStudioCodeManifest>(File.ReadAllText(manifestFullPath));
+						Version.TryParse(manifest.version.Split('-').First(), out version);
+						isPrerelease = manifest.version.ToLower().Contains("insider");
+						if (!string.IsNullOrEmpty(manifest.name))
+						{
+							displayName = manifest.name;
+						}
 					}
 				}
 			}
@@ -137,16 +138,47 @@ namespace Google.Unity.Antigravity.Editor
 				// do not fail if we are not able to retrieve the exact version number
 			}
 
-			if (displayName == "Antigravity" && editorPath.IndexOf("ide", StringComparison.OrdinalIgnoreCase) >= 0)
+			// If version not found from package.json (e.g. Electron asar builds), inspect FileVersionInfo
+			if (version == null && File.Exists(editorPath))
+			{
+				try
+				{
+					var fvi = FileVersionInfo.GetVersionInfo(editorPath);
+					var verStr = !string.IsNullOrEmpty(fvi.FileVersion) ? fvi.FileVersion : fvi.ProductVersion;
+					if (!string.IsNullOrEmpty(verStr))
+					{
+						Version.TryParse(verStr.Split('-').First().Trim(), out version);
+					}
+				}
+				catch
+				{
+				}
+			}
+
+			// Distinguish Antigravity IDE, Antigravity 2.0, and Codex
+			if (editorPath.IndexOf("codex", StringComparison.OrdinalIgnoreCase) >= 0)
+			{
+				displayName = "Codex";
+			}
+			else if (editorPath.IndexOf("ide", StringComparison.OrdinalIgnoreCase) >= 0 || displayName.IndexOf("ide", StringComparison.OrdinalIgnoreCase) >= 0)
 			{
 				displayName = "Antigravity IDE";
 			}
+			else if (version != null && version.Major >= 2)
+			{
+				displayName = "Antigravity 2.0";
+			}
+			else if (displayName.Equals("Antigravity", StringComparison.OrdinalIgnoreCase))
+			{
+				displayName = "Antigravity 2.0";
+			}
 
 			isPrerelease = isPrerelease || editorPath.ToLower().Contains("insider");
+			var versionSuffix = version != null && version.Major > 0 ? $" [{version.ToString(3)}]" : string.Empty;
 			installation = new AntigravityInstallation()
 			{
 				IsPrerelease = isPrerelease,
-				Name = displayName + (isPrerelease ? " - Insider" : string.Empty) + (version != null ? $" [{version.ToString(3)}]" : string.Empty),
+				Name = displayName + (isPrerelease ? " - Insider" : string.Empty) + versionSuffix,
 				Path = editorPath,
 				Version = version ?? new Version()
 			};
@@ -161,14 +193,47 @@ namespace Google.Unity.Antigravity.Editor
 #if UNITY_EDITOR_WIN
 			var localAppPath = IOPath.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Programs");
 			var programFiles = IOPath.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles));
+			var programFilesX86 = IOPath.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86));
 
-			foreach (var basePath in new[] { localAppPath, programFiles }) {
+			foreach (var basePath in new[] { localAppPath, programFiles, programFilesX86 }) {
+				if (string.IsNullOrEmpty(basePath) || !Directory.Exists(basePath))
+					continue;
+
 				candidates.Add(IOPath.Combine(basePath, "Antigravity IDE", "Antigravity IDE.exe"));
 				candidates.Add(IOPath.Combine(basePath, "antigravity", "antigravity.exe"));
+				candidates.Add(IOPath.Combine(basePath, "antigravity", "Antigravity.exe"));
+				candidates.Add(IOPath.Combine(basePath, "Codex", "Codex.exe"));
+				candidates.Add(IOPath.Combine(basePath, "OpenAI Codex", "Codex.exe"));
 			}
+
+			// WindowsApps (e.g. OpenAI.Codex)
+			try
+			{
+				var windowsApps = IOPath.Combine(programFiles, "WindowsApps");
+				if (Directory.Exists(windowsApps))
+				{
+					foreach (var dir in Directory.EnumerateDirectories(windowsApps, "*Codex*"))
+					{
+						var exe = IOPath.Combine(dir, "app", "Codex.exe");
+						if (File.Exists(exe))
+							candidates.Add(exe);
+					}
+				}
+			}
+			catch { }
 #elif UNITY_EDITOR_OSX
 			var appPath = IOPath.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles));
-			candidates.AddRange(Directory.EnumerateDirectories(appPath, "Antigravity*.app"));
+			if (Directory.Exists(appPath))
+			{
+				candidates.AddRange(Directory.EnumerateDirectories(appPath, "Antigravity*.app"));
+				candidates.AddRange(Directory.EnumerateDirectories(appPath, "*Codex*.app"));
+			}
+			var userAppPath = IOPath.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Applications");
+			if (Directory.Exists(userAppPath))
+			{
+				candidates.AddRange(Directory.EnumerateDirectories(userAppPath, "Antigravity*.app"));
+				candidates.AddRange(Directory.EnumerateDirectories(userAppPath, "*Codex*.app"));
+			}
 #elif UNITY_EDITOR_LINUX
 			// Well known locations
 			candidates.Add("/usr/bin/antigravity-ide");
@@ -177,12 +242,27 @@ namespace Google.Unity.Antigravity.Editor
 			candidates.Add("/usr/bin/antigravity");
 			candidates.Add("/bin/antigravity");
 			candidates.Add("/usr/local/bin/antigravity");
+			candidates.Add("/usr/bin/codex");
+			candidates.Add("/bin/codex");
+			candidates.Add("/usr/local/bin/codex");
 
 			// Preference ordered base directories relative to which desktop files should be searched
 			candidates.AddRange(GetXdgCandidates());
 #endif
 
-			foreach (var candidate in candidates.Distinct())
+			try
+			{
+				var customPath = EditorPrefs.GetString(CustomEditorPathKey, null);
+				if (!string.IsNullOrEmpty(customPath) && File.Exists(customPath))
+				{
+					candidates.Add(customPath);
+				}
+			}
+			catch
+			{
+			}
+
+			foreach (var candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
 			{
 				if (TryDiscoverInstallation(candidate, out var installation))
 					yield return installation;
@@ -201,7 +281,7 @@ namespace Google.Unity.Antigravity.Editor
 			var dirs = envdirs.Split(':');
 			foreach(var dir in dirs)
 			{
-				foreach (var desktopName in new[] { "antigravity-ide.desktop", "antigravity.desktop" })
+				foreach (var desktopName in new[] { "antigravity-ide.desktop", "antigravity.desktop", "codex.desktop" })
 				{
 					Match match = null;
 
@@ -538,14 +618,20 @@ namespace Google.Unity.Antigravity.Editor
 			processes.AddRange(Process.GetProcessesByName("Antigravity IDE Helper"));
 			processes.AddRange(Process.GetProcessesByName("Antigravity"));
 			processes.AddRange(Process.GetProcessesByName("Antigravity Helper"));
+			processes.AddRange(Process.GetProcessesByName("Codex"));
 #elif UNITY_EDITOR_LINUX
 			processes.AddRange(Process.GetProcessesByName("antigravity-ide"));
 			processes.AddRange(Process.GetProcessesByName("Antigravity IDE"));
 			processes.AddRange(Process.GetProcessesByName("antigravity"));
 			processes.AddRange(Process.GetProcessesByName("Antigravity"));
+			processes.AddRange(Process.GetProcessesByName("codex"));
+			processes.AddRange(Process.GetProcessesByName("Codex"));
 #else
 			processes.AddRange(Process.GetProcessesByName("Antigravity IDE"));
+			processes.AddRange(Process.GetProcessesByName("Antigravity"));
 			processes.AddRange(Process.GetProcessesByName("antigravity"));
+			processes.AddRange(Process.GetProcessesByName("Codex"));
+			processes.AddRange(Process.GetProcessesByName("codex"));
 #endif
 
 			foreach (var process in processes)
@@ -608,6 +694,8 @@ namespace Google.Unity.Antigravity.Editor
 			workspace ??= directory;
 			directory = workspace;
 
+			var isIde = application.IndexOf("ide", StringComparison.OrdinalIgnoreCase) >= 0;
+
 			if (EditorPrefs.GetBool(ReuseExistingWindowKey, false))
 			{
 				var existingProcess = FindRunningAntigravityWithSolution(directory);
@@ -616,8 +704,8 @@ namespace Google.Unity.Antigravity.Editor
 					try
 					{
 						var args = string.IsNullOrEmpty(path) ?
-							$"--reuse-window \"{directory}\"" :
-							$"--reuse-window -g \"{path}\":{line}:{column}";
+							(isIde ? $"--reuse-window \"{directory}\"" : $"\"{directory}\"") :
+							(isIde ? $"--reuse-window -g \"{path}\":{line}:{column}" : $"\"{path}\"");
 
 						ProcessRunner.Start(ProcessStartInfoFor(application, args));
 						return true;
@@ -630,8 +718,8 @@ namespace Google.Unity.Antigravity.Editor
 			}
 
 			var newArgs = string.IsNullOrEmpty(path) ?
-				$"--new-window \"{directory}\"" :
-				$"--new-window \"{directory}\" -g \"{path}\":{line}:{column}";
+				(isIde ? $"--new-window \"{directory}\"" : $"\"{directory}\"") :
+				(isIde ? $"--new-window \"{directory}\" -g \"{path}\":{line}:{column}" : $"\"{directory}\" \"{path}\"");
 
 			ProcessRunner.Start(ProcessStartInfoFor(application, newArgs));
 			return true;

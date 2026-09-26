@@ -15,8 +15,16 @@ This project is a port of the [Cursor Unity Plugin](https://github.com/boxqkrtm/
 5. Enter the git URL of this repository (e.g., `https://github.com/HarineshS/com.unity.ide.antigravity.git`).
 6. Click **Add**.
 
+## Supported Editors
+
+- **Antigravity IDE**: Full-featured AI-first IDE built on VS Code with C# bridge and IntelliSense.
+- **Antigravity 2.0**: Next-generation agentic desktop development environment for autonomous agent workflows.
+- **OpenAI Codex**: Standalone desktop coding environment powered by Codex.
+
 ## Features
 
-- **Smart IDE Detection**: Automatically detects Google Antigravity installations.
-- **Project Generation**: Generates compatible project files for Antigravity.
-- **Seamless Integration**: Open scripts and projects directly in Antigravity from Unity.
+- **Setup Chooser Window**: Automatically prompts on package import to choose your preferred editor, or open anytime via **Window** -> **Antigravity** -> **Code Editor Chooser** (or **Tools** -> **Antigravity** -> **Code Editor Chooser**).
+- **Auto-Discovery**: Automatically scans standard install paths across Windows, macOS, and Linux for Antigravity IDE, Antigravity 2.0, and Codex.
+- **Custom Executables**: Easily browse and configure custom executable locations.
+- **Project & Solution Generation**: Automatically generates `.csproj` and `.sln` files tailored for Unity C# scripting and debugging.
+- **One-Click Activation**: Instantly applies Unity's external script editor preference and regenerates project files.
