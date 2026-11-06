@@ -10,14 +10,18 @@ using System.Net;
 using System.Net.Sockets;
 using Google.Unity.Antigravity.Editor.Messaging;
 using Google.Unity.Antigravity.Editor.Testing;
+#if UNITY_6000_5_OR_NEWER
+using Unity.Scripting.LifecycleManagement;
+#endif
 using UnityEditor;
 using UnityEngine;
+using UnityEngine.Assemblies;
 using MessageType = Google.Unity.Antigravity.Editor.Messaging.MessageType;
 
 namespace Google.Unity.Antigravity.Editor
 {
 	[InitializeOnLoad]
-	internal class VisualStudioIntegration
+	internal partial class VisualStudioIntegration
 	{
 		class Client
 		{
@@ -69,15 +73,18 @@ namespace Google.Unity.Antigravity.Editor
 
 			try
 			{
-				var assemblies = AppDomain
+#if UNITY_6000_5_OR_NEWER
+				var assemblies = CurrentAssemblies.GetLoadedAssemblies().Where(a => checkList.Contains(a.GetName().Name));
+#else
+                var assemblies = AppDomain
 					.CurrentDomain
 					.GetAssemblies()
 					.Where(a => checkList.Contains(a.GetName().Name));
-
+#endif
 				foreach (var assembly in assemblies)
 				{
 					// for now we only want to warn against local assemblies, do not check externals.
-					var relativePath = FileUtility.MakeRelativeToProjectPath(assembly.Location);
+					var relativePath = FileUtility.MakeRelativeToProjectPath(assembly.GetLoadedAssemblyPath());
 					if (relativePath == null)
 						continue;
 
@@ -103,13 +110,21 @@ namespace Google.Unity.Antigravity.Editor
 			EditorApplication.update += callback;
 		}
 
+#if UNITY_EDITOR_WIN
+#if UNITY_6000_5_OR_NEWER
+		[AutoStaticsCleanup]
+		private static Action onCodeUnloading;
+		[OnCodeUnloading]
+		private static void OnCodeUnloading() => onCodeUnloading?.Invoke();
+        private static void RunOnShutdown(Action action) => onCodeUnloading += action;
+#else
 		private static void RunOnShutdown(Action action)
 		{
-			// Mono on OSX has all kinds of quirks on AppDomain shutdown
-#if UNITY_EDITOR_WIN
-			AppDomain.CurrentDomain.DomainUnload += (_, __) => action();
+            // Mono on OSX has all kinds of quirks on AppDomain shutdown
+            AppDomain.CurrentDomain.DomainUnload += (_, __) => action();
+        }
 #endif
-		}
+#endif
 
 		private static int DebuggingPort()
 		{
