@@ -1,6 +1,7 @@
 ﻿using System;
 
 using UnityEditor.TestTools.TestRunner.Api;
+using UnityEngine;
 
 namespace Google.Unity.Antigravity.Editor.Testing
 {
@@ -31,7 +32,11 @@ namespace Google.Unity.Antigravity.Editor.Testing
 
 			Type = testAdaptor.TypeInfo?.FullName;
 			Method = testAdaptor.Method?.Name;
+#if UNITY_6000_5_OR_NEWER
+			Assembly = testAdaptor.TypeInfo?.Assembly?.GetLoadedAssemblyPath();
+#else
 			Assembly = testAdaptor.TypeInfo?.Assembly?.Location;
+#endif
 
 			Parent = parent;
 		}
